@@ -1,6 +1,7 @@
 import { GameState } from '../types';
 import { Camera } from './Camera';
 import { TileAtlas } from './TileAtlas';
+import { SpriteManager } from './SpriteManager';
 import { MapRenderer } from './renderers/MapRenderer';
 import { SectorRenderer } from './renderers/SectorRenderer';
 import { UnitRenderer } from './renderers/UnitRenderer';
@@ -33,6 +34,10 @@ export class GameRenderer {
 
   setTileAtlas(atlas: TileAtlas): void {
     this.mapRenderer.setTileAtlas(atlas);
+  }
+
+  setSpriteManager(manager: SpriteManager): void {
+    this.unitRenderer.setSpriteManager(manager);
   }
 
   render(

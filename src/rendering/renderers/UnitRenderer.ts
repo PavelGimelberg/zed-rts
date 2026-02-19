@@ -1,8 +1,16 @@
 import { GameState, Unit } from '../../types';
 import { TEAM_COLORS, UNIT_DEFS } from '../../config/gameConfig';
 import { Camera } from '../Camera';
+import { SpriteManager, angleToDirection, Direction } from '../SpriteManager';
 
 export class UnitRenderer {
+  private spriteManager: SpriteManager | null = null;
+
+  /** Attach a SpriteManager for sprite-based rendering */
+  setSpriteManager(manager: SpriteManager): void {
+    this.spriteManager = manager;
+  }
+
   render(
     ctx: CanvasRenderingContext2D,
     state: GameState,
@@ -61,93 +69,25 @@ export class UnitRenderer {
         ctx.restore();
       }
 
-      // ── Unit body ──
-      if (def.isVehicle) {
-        // Vehicle: rectangle body
-        ctx.fillStyle = teamColor.main;
-        ctx.fillRect(screenX - def.size, screenY - def.size * 0.6, def.size * 2, def.size * 1.2);
+      // ── Unit body — try sprite first, fall back to shapes ──
+      const spriteDrawn = this.tryDrawSprite(ctx, unit, screenX, screenY, def.size, gameTime, state, camera, canvasW, canvasH);
 
-        // Turret circle
-        ctx.fillStyle = teamColor.light;
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, def.size * 0.5, 0, 2 * Math.PI);
-        ctx.fill();
-
-        // Gun barrel
-        let barrelAngle = 0;
-        if (unit.attackTargetId) {
-          const target = this.getTarget(state, unit.attackTargetId);
-          if (target) {
-            const tgt = camera.worldToScreen(target.x, target.y, canvasW, canvasH);
-            barrelAngle = Math.atan2(tgt.y - screenY, tgt.x - screenX);
-          }
-        } else if (unit.path.length > 0) {
-          const next = unit.path[0];
-          const nxt = camera.worldToScreen(next.x, next.y, canvasW, canvasH);
-          barrelAngle = Math.atan2(nxt.y - screenY, nxt.x - screenX);
-        }
-
-        ctx.strokeStyle = teamColor.dark;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(screenX, screenY);
-        ctx.lineTo(
-          screenX + Math.cos(barrelAngle) * def.size * 1.2,
-          screenY + Math.sin(barrelAngle) * def.size * 1.2
-        );
-        ctx.stroke();
-
-        // Tread lines
-        ctx.strokeStyle = teamColor.dark;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(screenX - def.size * 0.8, screenY - def.size * 0.8);
-        ctx.lineTo(screenX - def.size * 0.8, screenY + def.size * 0.8);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(screenX + def.size * 0.8, screenY - def.size * 0.8);
-        ctx.lineTo(screenX + def.size * 0.8, screenY + def.size * 0.8);
-        ctx.stroke();
-      } else {
-        // Infantry: body circle
-        ctx.fillStyle = teamColor.main;
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, def.size, 0, 2 * Math.PI);
-        ctx.fill();
-
-        // Head circle
-        ctx.fillStyle = teamColor.light;
-        ctx.beginPath();
-        ctx.arc(screenX, screenY - def.size * 0.4, def.size * 0.5, 0, 2 * Math.PI);
-        ctx.fill();
-
-        // Type indicator circle
-        ctx.fillStyle = def.color;
-        ctx.beginPath();
-        ctx.arc(screenX, screenY + def.size * 0.5, def.size * 0.3, 0, 2 * Math.PI);
-        ctx.fill();
-
-        // Weapon line toward target
-        if (unit.attackTargetId) {
-          const target = this.getTarget(state, unit.attackTargetId);
-          if (target) {
-            const tgt = camera.worldToScreen(target.x, target.y, canvasW, canvasH);
-            ctx.strokeStyle = def.color;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(screenX, screenY);
-            ctx.lineTo(tgt.x, tgt.y);
-            ctx.stroke();
-          }
+      if (!spriteDrawn) {
+        // Fallback: procedural shape rendering
+        if (def.isVehicle) {
+          this.drawVehicleShape(ctx, unit, screenX, screenY, def, teamColor, state, camera, canvasW, canvasH);
+        } else {
+          this.drawInfantryShape(ctx, unit, screenX, screenY, def, teamColor, state, camera, canvasW, canvasH);
         }
       }
 
       // Health bar if damaged
       if (unit.hp < unit.maxHp) {
-        const barWidth = def.size * 2.5;
+        const spriteSize = spriteDrawn ? 16 : def.size; // sprite renders larger
+        const barWidth = spriteDrawn ? 32 : def.size * 2.5;
         const barHeight = 3;
         const barX = screenX - barWidth / 2;
-        const barY = screenY - def.size - 8;
+        const barY = screenY - spriteSize - 8;
 
         ctx.fillStyle = '#333';
         ctx.fillRect(barX, barY, barWidth, barHeight);
@@ -168,7 +108,7 @@ export class UnitRenderer {
         ctx.fillStyle = '#fff';
         ctx.font = '10px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(def.name, screenX, screenY + def.size + 15);
+        ctx.fillText(def.name, screenX, screenY + (spriteDrawn ? 18 : def.size + 15));
       }
     }
 
@@ -245,6 +185,183 @@ export class UnitRenderer {
     ctx.lineTo(x, y + r);
     ctx.arcTo(x, y, x + r, y, r);
     ctx.closePath();
+  }
+
+  // ── Sprite rendering ──
+
+  private tryDrawSprite(
+    ctx: CanvasRenderingContext2D,
+    unit: Unit,
+    screenX: number,
+    screenY: number,
+    unitSize: number,
+    gameTime: number,
+    state: GameState,
+    camera: Camera,
+    canvasW: number,
+    canvasH: number,
+  ): boolean {
+    if (!this.spriteManager || !this.spriteManager.isLoaded) return false;
+
+    // Determine unit facing direction from movement path or attack target
+    const direction = this.getUnitDirection(unit, screenX, screenY, state, camera, canvasW, canvasH);
+    const isMoving = unit.state === 'moving' && unit.path.length > 0;
+
+    // Animation frame: cycle through walk frames based on game time
+    const walkFrameCount = this.spriteManager.getWalkFrameCount(unit.type);
+    const animFrame = Math.floor(gameTime / 8) % walkFrameCount; // ~7.5 fps animation
+
+    const sprite = this.spriteManager.getSprite(unit.type, unit.owner, direction, isMoving, animFrame);
+    if (!sprite) return false;
+
+    // Draw sprite centred on unit position, scaled up from 32px to a visible size
+    // Sprites are 32×32, we render them at 2x scale for good visibility on the iso map
+    const renderSize = 32;
+    ctx.imageSmoothingEnabled = false; // crisp pixel art!
+    ctx.drawImage(
+      sprite,
+      screenX - renderSize / 2,
+      screenY - renderSize / 2,
+      renderSize,
+      renderSize,
+    );
+    ctx.imageSmoothingEnabled = true;
+    return true;
+  }
+
+  private getUnitDirection(
+    unit: Unit,
+    screenX: number,
+    screenY: number,
+    state: GameState,
+    camera: Camera,
+    canvasW: number,
+    canvasH: number,
+  ): Direction {
+    // Priority 1: facing attack target
+    if (unit.attackTargetId) {
+      const target = this.getTarget(state, unit.attackTargetId);
+      if (target) {
+        const tgt = camera.worldToScreen(target.x, target.y, canvasW, canvasH);
+        const angle = Math.atan2(tgt.y - screenY, tgt.x - screenX);
+        return angleToDirection(angle);
+      }
+    }
+    // Priority 2: facing movement direction
+    if (unit.path.length > 0) {
+      const next = unit.path[0];
+      const nxt = camera.worldToScreen(next.x, next.y, canvasW, canvasH);
+      const angle = Math.atan2(nxt.y - screenY, nxt.x - screenX);
+      return angleToDirection(angle);
+    }
+    // Default: south-east (classic isometric default facing)
+    return 'south-east';
+  }
+
+  // ── Fallback shape rendering ──
+
+  private drawVehicleShape(
+    ctx: CanvasRenderingContext2D,
+    unit: Unit,
+    screenX: number,
+    screenY: number,
+    def: { size: number; color: string },
+    teamColor: { main: string; light: string; dark: string },
+    state: GameState,
+    camera: Camera,
+    canvasW: number,
+    canvasH: number,
+  ): void {
+    // Vehicle: rectangle body
+    ctx.fillStyle = teamColor.main;
+    ctx.fillRect(screenX - def.size, screenY - def.size * 0.6, def.size * 2, def.size * 1.2);
+
+    // Turret circle
+    ctx.fillStyle = teamColor.light;
+    ctx.beginPath();
+    ctx.arc(screenX, screenY, def.size * 0.5, 0, 2 * Math.PI);
+    ctx.fill();
+
+    // Gun barrel
+    let barrelAngle = 0;
+    if (unit.attackTargetId) {
+      const target = this.getTarget(state, unit.attackTargetId);
+      if (target) {
+        const tgt = camera.worldToScreen(target.x, target.y, canvasW, canvasH);
+        barrelAngle = Math.atan2(tgt.y - screenY, tgt.x - screenX);
+      }
+    } else if (unit.path.length > 0) {
+      const next = unit.path[0];
+      const nxt = camera.worldToScreen(next.x, next.y, canvasW, canvasH);
+      barrelAngle = Math.atan2(nxt.y - screenY, nxt.x - screenX);
+    }
+
+    ctx.strokeStyle = teamColor.dark;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(screenX, screenY);
+    ctx.lineTo(
+      screenX + Math.cos(barrelAngle) * def.size * 1.2,
+      screenY + Math.sin(barrelAngle) * def.size * 1.2
+    );
+    ctx.stroke();
+
+    // Tread lines
+    ctx.strokeStyle = teamColor.dark;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(screenX - def.size * 0.8, screenY - def.size * 0.8);
+    ctx.lineTo(screenX - def.size * 0.8, screenY + def.size * 0.8);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(screenX + def.size * 0.8, screenY - def.size * 0.8);
+    ctx.lineTo(screenX + def.size * 0.8, screenY + def.size * 0.8);
+    ctx.stroke();
+  }
+
+  private drawInfantryShape(
+    ctx: CanvasRenderingContext2D,
+    unit: Unit,
+    screenX: number,
+    screenY: number,
+    def: { size: number; color: string },
+    teamColor: { main: string; light: string; dark: string },
+    state: GameState,
+    camera: Camera,
+    canvasW: number,
+    canvasH: number,
+  ): void {
+    // Infantry: body circle
+    ctx.fillStyle = teamColor.main;
+    ctx.beginPath();
+    ctx.arc(screenX, screenY, def.size, 0, 2 * Math.PI);
+    ctx.fill();
+
+    // Head circle
+    ctx.fillStyle = teamColor.light;
+    ctx.beginPath();
+    ctx.arc(screenX, screenY - def.size * 0.4, def.size * 0.5, 0, 2 * Math.PI);
+    ctx.fill();
+
+    // Type indicator circle
+    ctx.fillStyle = def.color;
+    ctx.beginPath();
+    ctx.arc(screenX, screenY + def.size * 0.5, def.size * 0.3, 0, 2 * Math.PI);
+    ctx.fill();
+
+    // Weapon line toward target
+    if (unit.attackTargetId) {
+      const target = this.getTarget(state, unit.attackTargetId);
+      if (target) {
+        const tgt = camera.worldToScreen(target.x, target.y, canvasW, canvasH);
+        ctx.strokeStyle = def.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(screenX, screenY);
+        ctx.lineTo(tgt.x, tgt.y);
+        ctx.stroke();
+      }
+    }
   }
 
   private getTarget(state: GameState, targetId: string): { x: number; y: number } | null {

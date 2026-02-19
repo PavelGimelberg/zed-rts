@@ -4,6 +4,7 @@ import { createInitialState } from '../../game/GameState';
 import { GameRenderer } from '../../rendering/GameRenderer';
 import { Camera } from '../../rendering/Camera';
 import { TileAtlas } from '../../rendering/TileAtlas';
+import { SpriteManager } from '../../rendering/SpriteManager';
 import { InputHandler } from '../../input/InputHandler';
 import { CommandQueue } from '../../input/CommandQueue';
 import { SelectionManager } from '../../input/SelectionManager';
@@ -88,6 +89,14 @@ export function GameScreen({ onGameOver, localTeam = TEAM.RED, seed, gameMode = 
       renderer.setTileAtlas(tileAtlas);
     }).catch((err) => {
       console.warn('Tile atlas failed to load, using fallback tiles:', err);
+    });
+
+    // Load unit sprites in the background
+    const spriteManager = new SpriteManager();
+    spriteManager.load().then(() => {
+      renderer.setSpriteManager(spriteManager);
+    }).catch((err) => {
+      console.warn('Sprites failed to load, using fallback shapes:', err);
     });
 
     // Setup input
