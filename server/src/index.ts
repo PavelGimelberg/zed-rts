@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 
 const PORT = parseInt(process.env.PORT || '8080');
-const TURN_INTERVAL = 3;
+const TURN_INTERVAL = 15;
 
 // ── Types ──
 

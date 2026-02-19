@@ -15,6 +15,18 @@ export class AudioEngine {
     // Create audio context (with webkit fallback for older browsers)
     this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
 
+    // Resume audio context on first user interaction (needed when
+    // transitioning from lobby — the browser may have suspended it)
+    if (this.ctx.state === 'suspended') {
+      const resume = () => {
+        this.ctx?.resume();
+        document.removeEventListener('click', resume);
+        document.removeEventListener('keydown', resume);
+      };
+      document.addEventListener('click', resume, { once: true });
+      document.addEventListener('keydown', resume, { once: true });
+    }
+
     // Create music gain node
     this.musicGain = this.ctx.createGain();
     this.musicGain.gain.value = 0.18;

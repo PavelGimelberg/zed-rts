@@ -17,4 +17,4 @@ export type ServerMessage =
   | { type: 'opponentDisconnected' }
   | { type: 'error'; message: string };
 
-export const TURN_INTERVAL = 3;
+export const TURN_INTERVAL = 15;
