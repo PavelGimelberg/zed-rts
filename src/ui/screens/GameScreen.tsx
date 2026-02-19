@@ -163,16 +163,24 @@ export function GameScreen({ onGameOver, localTeam = TEAM.RED, seed, gameMode = 
 
     if (isMultiplayer && network) {
       // ── Multiplayer lockstep game loop ──
+      // Instead of batching all ticks at once (causes teleporting),
+      // we spread ticks across frames: 1 tick per frame for smooth motion.
       const net = network; // narrowed for closures
       const turnInterval = TURN_INTERVAL;
       let currentTurn = 0;
-      let frameInTurn = 0;
       let waitingForTurnData = false;
-      let turnDataReceived: Command[] | null = null;
       let localCommandsThisTurn: Command[] = [];
 
+      // Tick queue: incoming turn data gets spread across frames
+      let pendingTickCommands: Command[][] = [];
+      let ticksProcessedThisTurn = 0;
+
       net.onTurnData((_turn, commands) => {
-        turnDataReceived = commands;
+        // Build a queue of per-tick command arrays:
+        // first tick gets the combined commands, remaining ticks get empty arrays
+        for (let i = 0; i < turnInterval; i++) {
+          pendingTickCommands.push(i === 0 ? commands : []);
+        }
         waitingForTurnData = false;
       });
 
@@ -193,31 +201,26 @@ export function GameScreen({ onGameOver, localTeam = TEAM.RED, seed, gameMode = 
         const newCommands = commandQueue.drain();
         localCommandsThisTurn.push(...newCommands);
 
-        // If we have turn data, process it
-        if (turnDataReceived !== null) {
-          const combined = turnDataReceived;
-          turnDataReceived = null;
-
-          // Run turnInterval ticks — commands on first tick
-          for (let i = 0; i < turnInterval; i++) {
-            const tickCommands = i === 0 ? combined : [];
-            engine.tick(tickCommands);
-          }
+        // Process ONE tick per frame from the queue (smooth animation)
+        if (pendingTickCommands.length > 0) {
+          const tickCmds = pendingTickCommands.shift()!;
+          engine.tick(tickCmds);
           handleEvents(engine.state);
+          ticksProcessedThisTurn++;
 
-          currentTurn++;
-          frameInTurn = 0;
+          // When all ticks for this turn are done, advance turn counter
+          if (ticksProcessedThisTurn >= turnInterval) {
+            currentTurn++;
+            ticksProcessedThisTurn = 0;
+          }
         }
 
-        // Submit turn commands when it's time
-        if (!waitingForTurnData) {
-          frameInTurn++;
-          if (frameInTurn >= turnInterval) {
-            net.submitTurnCommands(currentTurn, localCommandsThisTurn);
-            localCommandsThisTurn = [];
-            waitingForTurnData = true;
-            frameInTurn = 0;
-          }
+        // Submit turn commands when we've rendered enough frames
+        // (submit early so server can relay while we animate remaining ticks)
+        if (!waitingForTurnData && ticksProcessedThisTurn === 0 && pendingTickCommands.length === 0) {
+          net.submitTurnCommands(currentTurn, localCommandsThisTurn);
+          localCommandsThisTurn = [];
+          waitingForTurnData = true;
         }
 
         renderFrame();
