@@ -1,0 +1,158 @@
+.resource-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  background: linear-gradient(180deg, rgba(30, 20, 20, 0.95), rgba(20, 20, 30, 0.95));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  border-bottom: 1px solid rgba(100, 100, 100, 0.3);
+  font-size: 14px;
+  font-weight: bold;
+  z-index: 100;
+}
+
+.resource-bar .team-red {
+  color: #ff6666;
+  flex: 1;
+}
+
+.resource-bar .game-time {
+  flex: 1;
+  text-align: center;
+  color: #aaa;
+}
+
+.resource-bar .team-blue {
+  color: #6666ff;
+  flex: 1;
+  text-align: right;
+}
+
+.hud-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 140px;
+  background: linear-gradient(180deg, rgba(20, 20, 30, 0.95), rgba(15, 15, 25, 0.98));
+  border-top: 1px solid rgba(100, 100, 100, 0.3);
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  z-index: 100;
+}
+
+.minimap-container {
+  width: 180px;
+  height: 120px;
+  border: 1px solid rgba(100, 100, 100, 0.5);
+  background: #0a0a14;
+  flex-shrink: 0;
+}
+
+.minimap-container canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: pointer;
+}
+
+.selection-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  color: #aaa;
+  font-size: 12px;
+  padding: 4px 8px;
+  overflow: hidden;
+}
+
+.selection-info h3 {
+  color: #fff;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.selection-info p {
+  margin: 2px 0;
+  color: #999;
+}
+
+.production-panel {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 4px;
+}
+
+.prod-btn {
+  width: 60px;
+  height: 50px;
+  background: rgba(40, 40, 50, 0.8);
+  border: 1px solid rgba(100, 100, 100, 0.3);
+  color: #aaa;
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  transition: background 0.2s, border 0.2s;
+  text-align: center;
+  padding: 4px;
+}
+
+.prod-btn:hover {
+  background: rgba(60, 60, 80, 0.9);
+  border-color: rgba(150, 150, 200, 0.5);
+}
+
+.prod-btn.active {
+  background: rgba(30, 80, 30, 0.9);
+  border-color: #44ff44;
+  color: #44ff44;
+}
+
+.prod-btn .icon {
+  font-size: 18px;
+  margin-bottom: 2px;
+}
+
+.prod-btn .label {
+  font-size: 9px;
+}
+
+.prod-btn .time {
+  font-size: 8px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.prod-btn.active .time {
+  color: #44ff44;
+}
+
+.toast {
+  position: fixed;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(20, 20, 30, 0.95);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 4px;
+  border-left: 3px solid #ff6666;
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  z-index: 500;
+}
+
+.toast.show {
+  opacity: 1;
+}
