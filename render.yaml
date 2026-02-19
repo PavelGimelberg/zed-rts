@@ -1,0 +1,11 @@
+services:
+  - type: web
+    runtime: node
+    name: zed-rts-server
+    plan: free
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
